@@ -127,7 +127,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, collection, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = typeof __firebase_config !== 'undefined' 
             ? JSON.parse(__firebase_config)
@@ -144,6 +144,20 @@
             console.error("Firebase initialization failed:", e);
             document.body.innerHTML = `<div class="text-red-500 p-4">Error: Could not connect to Firebase. Please check your configuration.</div>`;
         }
+        
+        // --- LOCAL DATA ---
+        const LOCAL_SAMPLE_DECK = {
+            id: "common-business-words",
+            name: "Common Business Words",
+            description: "Essential vocabulary for meetings and presentations.",
+            cards: [
+                { front: "Schedule", back: { explanation: "Pronounced 'SKED-jool' in AmE, not 'SHED-yool'.", ipa: "/ˈskɛdʒ.uːl/" }},
+                { front: "Hierarchy", back: { explanation: "Focus on the 'HI-er-ar-ky' sound.", ipa: "/ˈhaɪ.ə.rɑːr.ki/" }},
+                { front: "Colleague", back: { explanation: "Stress is on the first syllable: 'KO-leeg'.", ipa: "/ˈkɒl.iːɡ/" }},
+                { front: "Entrepreneur", back: { explanation: "A tricky one! 'on-truh-pruh-NUR'.", ipa: "/ˌɒn.trə.prəˈnɜːr/" }},
+                { front: "Negotiate", back: { explanation: "Pronounced 'ne-GO-she-ate'.", ipa: "/nəˈɡoʊ.ʃi.eɪt/" }}
+            ]
+        };
 
         // --- DOM ELEMENTS ---
         const authScreen = document.getElementById('auth-screen');
@@ -257,10 +271,10 @@
                 showScreen(allDoneScreen);
             }
         }
-        async function startPractice(deckId) {
+        async function startPractice(deckId, isLocal = false) {
             showScreen(loader);
             practiceScreen.dataset.deckId = deckId;
-            await loadDeckAndProgress(deckId);
+            await loadDeckAndProgress(deckId, isLocal);
             buildQueue();
             if (queue.length > 0) {
                 showScreen(practiceScreen);
@@ -278,32 +292,32 @@
         }
 
         // --- DATA HANDLING ---
-        async function setupSampleDecks() { /* ... same as before ... */ }
         async function loadDecks() {
             showScreen(loader);
-            const decksCollection = collection(db, `artifacts/${appId}/public/data/decks`);
-            const deckSnapshot = await getDocs(decksCollection);
             const deckList = document.getElementById('deck-list');
             deckList.innerHTML = '';
-            if (deckSnapshot.empty) {
-                deckList.innerHTML = `<p class="text-center text-gray-500">No decks found.</p>`;
-                return;
-            }
-            deckSnapshot.forEach(doc => {
-                const deck = doc.data();
-                const button = document.createElement('button');
-                button.className = "w-full text-left p-4 bg-gray-100 hover:bg-blue-100 rounded-lg transition";
-                button.innerHTML = `<h3 class="font-semibold text-lg">${deck.name}</h3><p class="text-sm text-gray-600">${deck.description}</p>`;
-                button.onclick = () => startPractice(deck.id);
-                deckList.appendChild(button);
-            });
+
+            // Always add the local sample deck to the list
+            const localDeck = LOCAL_SAMPLE_DECK;
+            const localButton = document.createElement('button');
+            localButton.className = "w-full text-left p-4 bg-gray-100 hover:bg-blue-100 rounded-lg transition";
+            localButton.innerHTML = `<h3 class="font-semibold text-lg">${localDeck.name}</h3><p class="text-sm text-gray-600">${localDeck.description}</p>`;
+            localButton.onclick = () => startPractice(localDeck.id, true); // isLocal = true
+            deckList.appendChild(localButton);
+            
             showScreen(deckSelectionScreen);
         }
-        async function loadDeckAndProgress(deckId) {
-            const deckRef = doc(db, `artifacts/${appId}/public/data/decks`, deckId);
-            const deckSnap = await getDoc(deckRef);
-            if (!deckSnap.exists()) { console.error("Deck not found!"); return; }
-            masterDeck = deckSnap.data().cards;
+        async function loadDeckAndProgress(deckId, isLocal = false) {
+            if (isLocal) {
+                masterDeck = LOCAL_SAMPLE_DECK.cards;
+            } else {
+                 // This part is for decks loaded from Firestore in the future
+                const deckRef = doc(db, `artifacts/${appId}/public/data/decks`, deckId);
+                const deckSnap = await getDoc(deckRef);
+                if (!deckSnap.exists()) { console.error("Deck not found!"); return; }
+                masterDeck = deckSnap.data().cards;
+            }
+            
             const progressRef = doc(db, `artifacts/${appId}/users/${userId}/progress`, deckId);
             const progressSnap = await getDoc(progressRef);
             userProgress = progressSnap.exists() ? progressSnap.data().progress || [] : [];
@@ -396,3 +410,9 @@
     </script>
 </body>
 </html>
+```json
+{
+  "name": "pronunciation-app",
+  "version": "1.0.0",
+  "private": true
+}
