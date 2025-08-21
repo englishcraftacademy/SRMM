@@ -130,142 +130,167 @@
 
     <!-- Firebase SDK -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // This event listener ensures that the script runs only after the entire page is loaded.
+        window.addEventListener('DOMContentLoaded', () => {
+            console.log("DOM fully loaded and parsed. Starting script.");
 
-        // --- CONFIGURATION ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyDrsyLfZZ6EAmceJRAF1ZbvJlQgsiAJTmM",
-            authDomain: "srmm-fb551.firebaseapp.com",
-            projectId: "srmm-fb551",
-            storageBucket: "srmm-fb551.firebasestorage.app",
-            messagingSenderId: "726243713127",
-            appId: "1:726243713127:web:97af2dc2e117e1d9c074c2"
-        };
-        
-        const appId = 'srs-pronunciation-app';
+            import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+            import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+            import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        let app, auth, db, userId;
-        try {
-            app = initializeApp(firebaseConfig);
-            auth = getAuth(app);
-            db = getFirestore(app);
-        } catch (e) {
-            console.error("Firebase initialization failed:", e);
-            document.body.innerHTML = `<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative max-w-lg mx-auto mt-10" role="alert"><strong class="font-bold">Initialization Error:</strong><p class="block sm:inline">${e.message}</p></div>`;
-        }
-        
-        const LOCAL_SAMPLE_DECK = {
-            id: "common-business-words",
-            name: "Common Business Words",
-            description: "Essential vocabulary for meetings and presentations.",
-            cards: [
-                { front: "Schedule", audioUrl: "https://ssl.gstatic.com/dictionary/static/sounds/20200429/schedule--_us_1.mp3", back: { explanation: "Pronounced 'SKED-jool' in AmE, not 'SHED-yool'.", ipa: "/ˈskɛdʒ.uːl/" }},
-                { front: "Hierarchy", audioUrl: "https://ssl.gstatic.com/dictionary/static/sounds/20200429/hierarchy--_us_1.mp3", back: { explanation: "Focus on the 'HI-er-ar-ky' sound.", ipa: "/ˈhaɪ.ə.rɑːr.ki/" }},
-                { front: "Colleague", audioUrl: "https://ssl.gstatic.com/dictionary/static/sounds/20200429/colleague--_us_1.mp3", back: { explanation: "Stress is on the first syllable: 'KO-leeg'.", ipa: "/ˈkɒl.iːɡ/" }},
-                { front: "Entrepreneur", audioUrl: "https://ssl.gstatic.com/dictionary/static/sounds/20200429/entrepreneur--_us_1.mp3", back: { explanation: "A tricky one! 'on-truh-pruh-NUR'.", ipa: "/ˌɒn.trə.prəˈnɜːr/" }},
-                { front: "Negotiate", audioUrl: "https://ssl.gstatic.com/dictionary/static/sounds/20200429/negotiate--_us_1.mp3", back: { explanation: "Pronounced 'ne-GO-she-ate'.", ipa: "/nəˈɡoʊ.ʃi.eɪt/" }}
-            ]
-        };
+            // --- CONFIGURATION ---
+            const firebaseConfig = {
+                apiKey: "AIzaSyDrsyLfZZ6EAmceJRAF1ZbvJlQgsiAJTmM",
+                authDomain: "srmm-fb551.firebaseapp.com",
+                projectId: "srmm-fb551",
+                storageBucket: "srmm-fb551.firebasestorage.app",
+                messagingSenderId: "726243713127",
+                appId: "1:726243713127:web:97af2dc2e117e1d9c074c2"
+            };
+            
+            const appId = 'srs-pronunciation-app';
 
-        // --- DOM ELEMENTS ---
-        const authScreen = document.getElementById('auth-screen');
-        const appContainer = document.getElementById('app-container');
-        const loginForm = document.getElementById('login-form');
-        const signupForm = document.getElementById('signup-form');
-        const authError = document.getElementById('auth-error');
-        const showSignup = document.getElementById('show-signup');
-        const showLogin = document.getElementById('show-login');
-        const signupMessage = document.getElementById('signup-message');
-        const logoutBtn = document.getElementById('logout-btn');
-        const userEmailDisplay = document.getElementById('user-email-display');
-        const loader = document.getElementById('loader');
-        const deckSelectionScreen = document.getElementById('deck-selection-screen');
-        const practiceScreen = document.getElementById('practice-screen');
-        const allDoneScreen = document.getElementById('all-done-screen');
-        const flashcard = document.getElementById('flashcard');
-        const cardFrontText = document.getElementById('card-front-text');
-        const cardBackText = document.getElementById('card-back-text');
-        const cardBackIpa = document.getElementById('card-back-ipa');
-        const playAudioBtn = document.getElementById('play-audio-btn');
-        const audioPlayer = document.getElementById('card-audio-player');
-        const showAnswerBtn = document.getElementById('show-answer-btn');
-        const answerButtons = document.getElementById('answer-buttons');
-        const hardBtn = document.getElementById('hard-btn');
-        const goodBtn = document.getElementById('good-btn');
-        const easyBtn = document.getElementById('easy-btn');
-        const newCountEl = document.getElementById('new-count');
-        const reviewCountEl = document.getElementById('review-count');
-        const doneCountEl = document.getElementById('done-count');
-        const backToDecksBtn = document.getElementById('back-to-decks-btn');
-
-        // --- APP STATE ---
-        let masterDeck = [];
-        let userProgress = [];
-        let queue = [];
-        let currentCard = null;
-        let stats = { new: 0, review: 0, done: 0 };
-        
-        // --- SPACED REPETITION LOGIC ---
-        const SRS = { getCardProgress(cardIndex) { return userProgress.find(p => p.cardIndex === cardIndex); }, updateCardProgress(cardIndex, quality) { let progress = this.getCardProgress(cardIndex); if (!progress) { progress = { cardIndex, interval: 0, easeFactor: 2.5, nextReview: new Date().toISOString() }; userProgress.push(progress); } if (quality < 1) { progress.interval = 1; progress.easeFactor = Math.max(1.3, progress.easeFactor - 0.2); } else { if (progress.interval === 0) progress.interval = 1; else if (progress.interval === 1) progress.interval = 6; else progress.interval = Math.round(progress.interval * progress.easeFactor); if (quality === 2) { progress.easeFactor += 0.15; progress.interval = Math.round(progress.interval * 1.3); } } const nextReviewDate = new Date(); nextReviewDate.setDate(nextReviewDate.getDate() + progress.interval); progress.nextReview = nextReviewDate.toISOString(); } };
-        
-        // --- UI FUNCTIONS ---
-        function showScreen(screen) { loader.classList.add('hidden'); deckSelectionScreen.classList.add('hidden'); practiceScreen.classList.add('hidden'); allDoneScreen.classList.add('hidden'); screen.classList.remove('hidden'); }
-        function updateStatsUI() { newCountEl.textContent = `New: ${stats.new}`; reviewCountEl.textContent = `To Review: ${stats.review}`; doneCountEl.textContent = `Done: ${stats.done}`; }
-        function displayCard(cardData) { flashcard.classList.remove('is-flipped'); cardFrontText.textContent = cardData.front; cardBackText.textContent = cardData.back.explanation; cardBackIpa.textContent = cardData.back.ipa; if (cardData.audioUrl) { audioPlayer.src = cardData.audioUrl; playAudioBtn.classList.remove('hidden'); } else { playAudioBtn.classList.add('hidden'); } showAnswerBtn.classList.remove('hidden'); answerButtons.classList.add('hidden'); }
-        
-        // --- MAIN APP FLOW ---
-        function buildQueue() { const now = new Date().toISOString(); const newCards = []; const reviewCards = []; masterDeck.forEach((card, index) => { const progress = SRS.getCardProgress(index); if (!progress) newCards.push({ cardIndex: index, type: 'new' }); else if (progress.nextReview <= now) reviewCards.push({ cardIndex: index, type: 'review' }); }); queue = [...reviewCards, ...newCards.slice(0, 10)]; stats = { new: newCards.length, review: reviewCards.length, done: 0 }; updateStatsUI(); }
-        function nextCard() { if (queue.length > 0) { currentCard = queue.shift(); const cardData = masterDeck[currentCard.cardIndex]; displayCard(cardData); } else { saveProgress(); showScreen(allDoneScreen); } }
-        async function startPractice(deckId, isLocal = false) { showScreen(loader); practiceScreen.dataset.deckId = deckId; await loadDeckAndProgress(deckId, isLocal); buildQueue(); if (queue.length > 0) { showScreen(practiceScreen); nextCard(); } else { showScreen(allDoneScreen); } }
-        function handleAnswer(quality) { SRS.updateCardProgress(currentCard.cardIndex, quality); if (currentCard.type === 'new') stats.new--; else stats.review--; stats.done++; updateStatsUI(); nextCard(); }
-        
-        // --- DATA HANDLING ---
-        async function loadDecks() {
-            console.log("Starting loadDecks...");
+            let app, auth, db, userId;
             try {
-                showScreen(loader);
-                const deckList = document.getElementById('deck-list');
-                if (!deckList) {
-                    console.error("Deck list element not found!");
-                    return;
-                }
-                deckList.innerHTML = '';
-                const localDeck = LOCAL_SAMPLE_DECK;
-                const localButton = document.createElement('button');
-                localButton.className = "w-full text-left p-4 bg-gray-100 hover:bg-blue-100 rounded-lg transition";
-                localButton.innerHTML = `<h3 class="font-semibold text-lg">${localDeck.name}</h3><p class="text-sm text-gray-600">${localDeck.description}</p>`;
-                localButton.onclick = () => startPractice(localDeck.id, true);
-                deckList.appendChild(localButton);
-                
-                console.log("Local deck loaded. Showing screen.");
-                showScreen(deckSelectionScreen);
-            } catch (error) {
-                console.error("An error occurred in loadDecks:", error);
+                console.log("Attempting to initialize Firebase...");
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                console.log("Firebase initialized successfully.");
+            } catch (e) {
+                console.error("CRITICAL ERROR during Firebase initialization:", e);
+                document.body.innerHTML = `<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative max-w-lg mx-auto mt-10" role="alert"><strong class="font-bold">Initialization Error:</strong><p class="block sm:inline">${e.message}</p></div>`;
+                return; // Stop execution if Firebase fails
             }
-        }
-        async function loadDeckAndProgress(deckId, isLocal = false) { if (isLocal) { masterDeck = LOCAL_SAMPLE_DECK.cards; } else { const deckRef = doc(db, `artifacts/${appId}/public/data/decks`, deckId); const deckSnap = await getDoc(deckRef); if (!deckSnap.exists()) { console.error("Deck not found!"); return; } masterDeck = deckSnap.data().cards; } const progressRef = doc(db, `artifacts/${appId}/users/${userId}/progress`, deckId); const progressSnap = await getDoc(progressRef); userProgress = progressSnap.exists() ? progressSnap.data().progress || [] : []; }
-        async function saveProgress() { if (!userId || !currentCard) return; const deckId = practiceScreen.dataset.deckId; const progressRef = doc(db, `artifacts/${appId}/users/${userId}/progress`, deckId); try { await setDoc(progressRef, { progress: userProgress }, { merge: true }); } catch (error) { console.error("Error saving progress: ", error); } }
-        
-        // --- AUTHENTICATION LOGIC ---
-        if (auth) {
-            onAuthStateChanged(auth, async (user) => { if (user) { userId = user.uid; userEmailDisplay.textContent = user.email; authScreen.classList.add('hidden'); appContainer.classList.remove('hidden'); await loadDecks(); } else { userId = null; appContainer.classList.add('hidden'); authScreen.classList.remove('hidden'); } });
-            loginForm.addEventListener('submit', async (e) => { e.preventDefault(); authError.textContent = ''; const email = document.getElementById('login-email').value; const password = document.getElementById('login-password').value; try { await signInWithEmailAndPassword(auth, email, password); } catch (error) { authError.textContent = error.message; } });
-            signupForm.addEventListener('submit', async (e) => { e.preventDefault(); authError.textContent = ''; const email = document.getElementById('signup-email').value; const password = document.getElementById('signup-password').value; try { await createUserWithEmailAndPassword(auth, email, password); } catch (error) { authError.textContent = error.message; } });
-            logoutBtn.addEventListener('click', async () => { await signOut(auth); });
-            showSignup.addEventListener('click', (e) => { e.preventDefault(); loginForm.classList.add('hidden'); signupForm.classList.remove('hidden'); document.querySelector('.text-sm.text-gray-600').classList.add('hidden'); signupMessage.classList.remove('hidden'); });
-            showLogin.addEventListener('click', (e) => { e.preventDefault(); signupForm.classList.add('hidden'); loginForm.classList.remove('hidden'); signupMessage.classList.add('hidden'); document.querySelector('.text-sm.text-gray-600').classList.remove('hidden'); });
-        }
-        
-        // --- EVENT LISTENERS ---
-        flashcard.addEventListener('click', () => { flashcard.classList.add('is-flipped'); showAnswerBtn.classList.add('hidden'); answerButtons.classList.remove('hidden'); });
-        showAnswerBtn.addEventListener('click', (e) => { e.stopPropagation(); flashcard.click(); });
-        playAudioBtn.addEventListener('click', (e) => { e.stopPropagation(); audioPlayer.play().catch(error => console.error("Audio playback error:", error)); });
-        hardBtn.addEventListener('click', () => handleAnswer(0));
-        goodBtn.addEventListener('click', () => handleAnswer(1));
-        easyBtn.addEventListener('click', () => handleAnswer(2));
-        backToDecksBtn.addEventListener('click', () => loadDecks());
+            
+            const LOCAL_SAMPLE_DECK = {
+                id: "common-business-words",
+                name: "Common Business Words",
+                description: "Essential vocabulary for meetings and presentations.",
+                cards: [
+                    { front: "Schedule", audioUrl: "https://ssl.gstatic.com/dictionary/static/sounds/20200429/schedule--_us_1.mp3", back: { explanation: "Pronounced 'SKED-jool' in AmE, not 'SHED-yool'.", ipa: "/ˈskɛdʒ.uːl/" }},
+                    { front: "Hierarchy", audioUrl: "https://ssl.gstatic.com/dictionary/static/sounds/20200429/hierarchy--_us_1.mp3", back: { explanation: "Focus on the 'HI-er-ar-ky' sound.", ipa: "/ˈhaɪ.ə.rɑːr.ki/" }},
+                    { front: "Colleague", audioUrl: "https://ssl.gstatic.com/dictionary/static/sounds/20200429/colleague--_us_1.mp3", back: { explanation: "Stress is on the first syllable: 'KO-leeg'.", ipa: "/ˈkɒl.iːɡ/" }},
+                    { front: "Entrepreneur", audioUrl: "https://ssl.gstatic.com/dictionary/static/sounds/20200429/entrepreneur--_us_1.mp3", back: { explanation: "A tricky one! 'on-truh-pruh-NUR'.", ipa: "/ˌɒn.trə.prəˈnɜːr/" }},
+                    { front: "Negotiate", audioUrl: "https://ssl.gstatic.com/dictionary/static/sounds/20200429/negotiate--_us_1.mp3", back: { explanation: "Pronounced 'ne-GO-she-ate'.", ipa: "/nəˈɡoʊ.ʃi.eɪt/" }}
+                ]
+            };
+
+            // --- DOM ELEMENTS ---
+            const authScreen = document.getElementById('auth-screen');
+            const appContainer = document.getElementById('app-container');
+            const loginForm = document.getElementById('login-form');
+            const signupForm = document.getElementById('signup-form');
+            const authError = document.getElementById('auth-error');
+            const showSignup = document.getElementById('show-signup');
+            const showLogin = document.getElementById('show-login');
+            const signupMessage = document.getElementById('signup-message');
+            const logoutBtn = document.getElementById('logout-btn');
+            const userEmailDisplay = document.getElementById('user-email-display');
+            const loader = document.getElementById('loader');
+            const deckSelectionScreen = document.getElementById('deck-selection-screen');
+            const practiceScreen = document.getElementById('practice-screen');
+            const allDoneScreen = document.getElementById('all-done-screen');
+            const flashcard = document.getElementById('flashcard');
+            const cardFrontText = document.getElementById('card-front-text');
+            const cardBackText = document.getElementById('card-back-text');
+            const cardBackIpa = document.getElementById('card-back-ipa');
+            const playAudioBtn = document.getElementById('play-audio-btn');
+            const audioPlayer = document.getElementById('card-audio-player');
+            const showAnswerBtn = document.getElementById('show-answer-btn');
+            const answerButtons = document.getElementById('answer-buttons');
+            const hardBtn = document.getElementById('hard-btn');
+            const goodBtn = document.getElementById('good-btn');
+            const easyBtn = document.getElementById('easy-btn');
+            const newCountEl = document.getElementById('new-count');
+            const reviewCountEl = document.getElementById('review-count');
+            const doneCountEl = document.getElementById('done-count');
+            const backToDecksBtn = document.getElementById('back-to-decks-btn');
+
+            // --- APP STATE ---
+            let masterDeck = [];
+            let userProgress = [];
+            let queue = [];
+            let currentCard = null;
+            let stats = { new: 0, review: 0, done: 0 };
+            
+            // --- SPACED REPETITION LOGIC ---
+            const SRS = { getCardProgress(cardIndex) { return userProgress.find(p => p.cardIndex === cardIndex); }, updateCardProgress(cardIndex, quality) { let progress = this.getCardProgress(cardIndex); if (!progress) { progress = { cardIndex, interval: 0, easeFactor: 2.5, nextReview: new Date().toISOString() }; userProgress.push(progress); } if (quality < 1) { progress.interval = 1; progress.easeFactor = Math.max(1.3, progress.easeFactor - 0.2); } else { if (progress.interval === 0) progress.interval = 1; else if (progress.interval === 1) progress.interval = 6; else progress.interval = Math.round(progress.interval * progress.easeFactor); if (quality === 2) { progress.easeFactor += 0.15; progress.interval = Math.round(progress.interval * 1.3); } } const nextReviewDate = new Date(); nextReviewDate.setDate(nextReviewDate.getDate() + progress.interval); progress.nextReview = nextReviewDate.toISOString(); } };
+            
+            // --- UI FUNCTIONS ---
+            function showScreen(screen) { loader.classList.add('hidden'); deckSelectionScreen.classList.add('hidden'); practiceScreen.classList.add('hidden'); allDoneScreen.classList.add('hidden'); screen.classList.remove('hidden'); }
+            function updateStatsUI() { newCountEl.textContent = `New: ${stats.new}`; reviewCountEl.textContent = `To Review: ${stats.review}`; doneCountEl.textContent = `Done: ${stats.done}`; }
+            function displayCard(cardData) { flashcard.classList.remove('is-flipped'); cardFrontText.textContent = cardData.front; cardBackText.textContent = cardData.back.explanation; cardBackIpa.textContent = cardData.back.ipa; if (cardData.audioUrl) { audioPlayer.src = cardData.audioUrl; playAudioBtn.classList.remove('hidden'); } else { playAudioBtn.classList.add('hidden'); } showAnswerBtn.classList.remove('hidden'); answerButtons.classList.add('hidden'); }
+            
+            // --- MAIN APP FLOW ---
+            function buildQueue() { const now = new Date().toISOString(); const newCards = []; const reviewCards = []; masterDeck.forEach((card, index) => { const progress = SRS.getCardProgress(index); if (!progress) newCards.push({ cardIndex: index, type: 'new' }); else if (progress.nextReview <= now) reviewCards.push({ cardIndex: index, type: 'review' }); }); queue = [...reviewCards, ...newCards.slice(0, 10)]; stats = { new: newCards.length, review: reviewCards.length, done: 0 }; updateStatsUI(); }
+            function nextCard() { if (queue.length > 0) { currentCard = queue.shift(); const cardData = masterDeck[currentCard.cardIndex]; displayCard(cardData); } else { saveProgress(); showScreen(allDoneScreen); } }
+            async function startPractice(deckId, isLocal = false) { showScreen(loader); practiceScreen.dataset.deckId = deckId; await loadDeckAndProgress(deckId, isLocal); buildQueue(); if (queue.length > 0) { showScreen(practiceScreen); nextCard(); } else { showScreen(allDoneScreen); } }
+            function handleAnswer(quality) { SRS.updateCardProgress(currentCard.cardIndex, quality); if (currentCard.type === 'new') stats.new--; else stats.review--; stats.done++; updateStatsUI(); nextCard(); }
+            
+            // --- DATA HANDLING ---
+            async function loadDecks() {
+                console.log("Step 1: Starting loadDecks function.");
+                try {
+                    showScreen(loader);
+                    console.log("Step 2: Loader is visible.");
+                    const deckList = document.getElementById('deck-list');
+                    if (!deckList) {
+                        console.error("Deck list element not found!");
+                        return;
+                    }
+                    deckList.innerHTML = '';
+                    const localDeck = LOCAL_SAMPLE_DECK;
+                    const localButton = document.createElement('button');
+                    localButton.className = "w-full text-left p-4 bg-gray-100 hover:bg-blue-100 rounded-lg transition";
+                    localButton.innerHTML = `<h3 class="font-semibold text-lg">${localDeck.name}</h3><p class="text-sm text-gray-600">${localDeck.description}</p>`;
+                    localButton.onclick = () => startPractice(localDeck.id, true);
+                    deckList.appendChild(localButton);
+                    
+                    console.log("Step 3: Local deck button has been created and added.");
+                    showScreen(deckSelectionScreen);
+                    console.log("Step 4: Deck selection screen should now be visible.");
+                } catch (error).
+                    console.error("CRITICAL ERROR in loadDecks:", error);
+                }
+            }
+            async function loadDeckAndProgress(deckId, isLocal = false) { if (isLocal) { masterDeck = LOCAL_SAMPLE_DECK.cards; } else { const deckRef = doc(db, `artifacts/${appId}/public/data/decks`, deckId); const deckSnap = await getDoc(deckRef); if (!deckSnap.exists()) { console.error("Deck not found!"); return; } masterDeck = deckSnap.data().cards; } const progressRef = doc(db, `artifacts/${appId}/users/${userId}/progress`, deckId); const progressSnap = await getDoc(progressRef); userProgress = progressSnap.exists() ? progressSnap.data().progress || [] : []; }
+            async function saveProgress() { if (!userId || !currentCard) return; const deckId = practiceScreen.dataset.deckId; const progressRef = doc(db, `artifacts/${appId}/users/${userId}/progress`, deckId); try { await setDoc(progressRef, { progress: userProgress }, { merge: true }); } catch (error) { console.error("Error saving progress: ", error); } }
+            
+            // --- AUTHENTICATION LOGIC ---
+            if (auth) {
+                console.log("Auth service is ready. Setting up listener.");
+                onAuthStateChanged(auth, async (user) => { 
+                    if (user) { 
+                        console.log("User is signed in:", user.uid);
+                        userId = user.uid; 
+                        userEmailDisplay.textContent = user.email; 
+                        authScreen.classList.add('hidden'); 
+                        appContainer.classList.remove('hidden'); 
+                        await loadDecks(); 
+                    } else { 
+                        console.log("No user is signed in.");
+                        userId = null; 
+                        appContainer.classList.add('hidden'); 
+                        authScreen.classList.remove('hidden'); 
+                    } 
+                });
+                loginForm.addEventListener('submit', async (e) => { e.preventDefault(); authError.textContent = ''; const email = document.getElementById('login-email').value; const password = document.getElementById('login-password').value; try { await signInWithEmailAndPassword(auth, email, password); } catch (error) { authError.textContent = error.message; } });
+                signupForm.addEventListener('submit', async (e) => { e.preventDefault(); authError.textContent = ''; const email = document.getElementById('signup-email').value; const password = document.getElementById('signup-password').value; try { await createUserWithEmailAndPassword(auth, email, password); } catch (error) { authError.textContent = error.message; } });
+                logoutBtn.addEventListener('click', async () => { await signOut(auth); });
+                showSignup.addEventListener('click', (e) => { e.preventDefault(); loginForm.classList.add('hidden'); signupForm.classList.remove('hidden'); document.querySelector('.text-sm.text-gray-600').classList.add('hidden'); signupMessage.classList.remove('hidden'); });
+                showLogin.addEventListener('click', (e) => { e.preventDefault(); signupForm.classList.add('hidden'); loginForm.classList.remove('hidden'); signupMessage.classList.add('hidden'); document.querySelector('.text-sm.text-gray-600').classList.remove('hidden'); });
+            }
+            
+            // --- EVENT LISTENERS ---
+            flashcard.addEventListener('click', () => { flashcard.classList.add('is-flipped'); showAnswerBtn.classList.add('hidden'); answerButtons.classList.remove('hidden'); });
+            showAnswerBtn.addEventListener('click', (e) => { e.stopPropagation(); flashcard.click(); });
+            playAudioBtn.addEventListener('click', (e) => { e.stopPropagation(); audioPlayer.play().catch(error => console.error("Audio playback error:", error)); });
+            hardBtn.addEventListener('click', () => handleAnswer(0));
+            goodBtn.addEventListener('click', () => handleAnswer(1));
+            easyBtn.addEventListener('click', () => handleAnswer(2));
+            backToDecksBtn.addEventListener('click', () => loadDecks());
+        });
     </script>
 </body>
 </html>
