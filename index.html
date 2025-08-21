@@ -134,7 +134,6 @@
         import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // This event listener ensures that the script runs only after the entire page is loaded.
         window.addEventListener('DOMContentLoaded', () => {
             console.log("DOM fully loaded and parsed. Starting script.");
 
@@ -160,7 +159,7 @@
             } catch (e) {
                 console.error("CRITICAL ERROR during Firebase initialization:", e);
                 document.body.innerHTML = `<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative max-w-lg mx-auto mt-10" role="alert"><strong class="font-bold">Initialization Error:</strong><p class="block sm:inline">${e.message}</p></div>`;
-                return; // Stop execution if Firebase fails
+                return; 
             }
             
             const LOCAL_SAMPLE_DECK = {
@@ -168,11 +167,11 @@
                 name: "Common Business Words",
                 description: "Essential vocabulary for meetings and presentations.",
                 cards: [
-                    { front: "Schedule", audioUrl: "https://ssl.gstatic.com/dictionary/static/sounds/20200429/schedule--_us_1.mp3", back: { explanation: "Pronounced 'SKED-jool' in AmE, not 'SHED-yool'.", ipa: "/ˈskɛdʒ.uːl/" }},
-                    { front: "Hierarchy", audioUrl: "https://ssl.gstatic.com/dictionary/static/sounds/20200429/hierarchy--_us_1.mp3", back: { explanation: "Focus on the 'HI-er-ar-ky' sound.", ipa: "/ˈhaɪ.ə.rɑːr.ki/" }},
-                    { front: "Colleague", audioUrl: "https://ssl.gstatic.com/dictionary/static/sounds/20200429/colleague--_us_1.mp3", back: { explanation: "Stress is on the first syllable: 'KO-leeg'.", ipa: "/ˈkɒl.iːɡ/" }},
-                    { front: "Entrepreneur", audioUrl: "https://ssl.gstatic.com/dictionary/static/sounds/20200429/entrepreneur--_us_1.mp3", back: { explanation: "A tricky one! 'on-truh-pruh-NUR'.", ipa: "/ˌɒn.trə.prəˈnɜːr/" }},
-                    { front: "Negotiate", audioUrl: "https://ssl.gstatic.com/dictionary/static/sounds/20200429/negotiate--_us_1.mp3", back: { explanation: "Pronounced 'ne-GO-she-ate'.", ipa: "/nəˈɡoʊ.ʃi.eɪt/" }}
+                    { front: "Schedule", back: { explanation: "Pronounced 'SKED-jool' in AmE, not 'SHED-yool'.", ipa: "/ˈskɛdʒ.uːl/" }},
+                    { front: "Hierarchy", back: { explanation: "Focus on the 'HI-er-ar-ky' sound.", ipa: "/ˈhaɪ.ə.rɑːr.ki/" }},
+                    { front: "Colleague", back: { explanation: "Stress is on the first syllable: 'KO-leeg'.", ipa: "/ˈkɒl.iːɡ/" }},
+                    { front: "Entrepreneur", back: { explanation: "A tricky one! 'on-truh-pruh-NUR'.", ipa: "/ˌɒn.trə.prəˈnɜːr/" }},
+                    { front: "Negotiate", back: { explanation: "Pronounced 'ne-GO-she-ate'.", ipa: "/nəˈɡoʊ.ʃi.eɪt/" }}
                 ]
             };
 
@@ -196,7 +195,6 @@
             const cardBackText = document.getElementById('card-back-text');
             const cardBackIpa = document.getElementById('card-back-ipa');
             const playAudioBtn = document.getElementById('play-audio-btn');
-            const audioPlayer = document.getElementById('card-audio-player');
             const showAnswerBtn = document.getElementById('show-answer-btn');
             const answerButtons = document.getElementById('answer-buttons');
             const hardBtn = document.getElementById('hard-btn');
@@ -220,7 +218,7 @@
             // --- UI FUNCTIONS ---
             function showScreen(screen) { loader.classList.add('hidden'); deckSelectionScreen.classList.add('hidden'); practiceScreen.classList.add('hidden'); allDoneScreen.classList.add('hidden'); screen.classList.remove('hidden'); }
             function updateStatsUI() { newCountEl.textContent = `New: ${stats.new}`; reviewCountEl.textContent = `To Review: ${stats.review}`; doneCountEl.textContent = `Done: ${stats.done}`; }
-            function displayCard(cardData) { flashcard.classList.remove('is-flipped'); cardFrontText.textContent = cardData.front; cardBackText.textContent = cardData.back.explanation; cardBackIpa.textContent = cardData.back.ipa; if (cardData.audioUrl) { audioPlayer.src = cardData.audioUrl; playAudioBtn.classList.remove('hidden'); } else { playAudioBtn.classList.add('hidden'); } showAnswerBtn.classList.remove('hidden'); answerButtons.classList.add('hidden'); }
+            function displayCard(cardData) { flashcard.classList.remove('is-flipped'); cardFrontText.textContent = cardData.front; cardBackText.textContent = cardData.back.explanation; cardBackIpa.textContent = cardData.back.ipa; showAnswerBtn.classList.remove('hidden'); answerButtons.classList.add('hidden'); }
             
             // --- MAIN APP FLOW ---
             function buildQueue() { const now = new Date().toISOString(); const newCards = []; const reviewCards = []; masterDeck.forEach((card, index) => { const progress = SRS.getCardProgress(index); if (!progress) newCards.push({ cardIndex: index, type: 'new' }); else if (progress.nextReview <= now) reviewCards.push({ cardIndex: index, type: 'review' }); }); queue = [...reviewCards, ...newCards.slice(0, 10)]; stats = { new: newCards.length, review: reviewCards.length, done: 0 }; updateStatsUI(); }
@@ -285,7 +283,18 @@
             // --- EVENT LISTENERS ---
             flashcard.addEventListener('click', () => { flashcard.classList.add('is-flipped'); showAnswerBtn.classList.add('hidden'); answerButtons.classList.remove('hidden'); });
             showAnswerBtn.addEventListener('click', (e) => { e.stopPropagation(); flashcard.click(); });
-            playAudioBtn.addEventListener('click', (e) => { e.stopPropagation(); audioPlayer.play().catch(error => console.error("Audio playback error:", error)); });
+            playAudioBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent card from flipping
+                const textToSpeak = cardFrontText.textContent;
+                if ('speechSynthesis' in window && textToSpeak) {
+                    console.log("Speaking:", textToSpeak);
+                    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+                    utterance.lang = 'en-US'; // Specify American English
+                    window.speechSynthesis.speak(utterance);
+                } else {
+                    console.error("Text-to-Speech is not supported in this browser or no text to speak.");
+                }
+            });
             hardBtn.addEventListener('click', () => handleAnswer(0));
             goodBtn.addEventListener('click', () => handleAnswer(1));
             easyBtn.addEventListener('click', () => handleAnswer(2));
