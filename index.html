@@ -1,599 +1,324 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { initializeApp } from 'firebase/app';
-import { 
-    getAuth, 
-    onAuthStateChanged, 
-    createUserWithEmailAndPassword, 
-    signInWithEmailAndPassword, 
-    signOut 
-} from 'firebase/auth';
-import { 
-    getFirestore, 
-    doc, 
-    getDoc, 
-    setDoc, 
-    collection, 
-    getDocs,
-    writeBatch,
-    Timestamp
-} from 'firebase/firestore';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { ArrowLeft, Loader2, PlusCircle, Volume2, Sparkles, LogOut, CheckCircle } from 'lucide-react';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spaced Repetition Pronunciation Practice</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- React, Babel, and Recharts for in-browser JSX transformation and charting -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .card { transform-style: preserve-3d; transition: transform 0.6s; }
+        .card.is-flipped { transform: rotateY(180deg); }
+        .card-face { backface-visibility: hidden; position: absolute; width: 100%; height: 100%; }
+        .card-face-back { transform: rotateY(180deg); }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div id="root"></div>
 
-// --- Firebase Configuration ---
-// This would be replaced by the environment variable in a real build process
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
-    ? JSON.parse(__firebase_config)
-    : {
-        apiKey: "AIzaSyDrsyLfZZ6EAmceJRAF1ZbvJlQgsiAJTmM",
-        authDomain: "srmm-fb551.firebaseapp.com",
-        projectId: "srmm-fb551",
-        storageBucket: "srmm-fb551.firebasestorage.app",
-        messagingSenderId: "726243713127",
-        appId: "1:726243713127:web:97af2dc2e117e1d9c074c2"
-    };
+    <script type="text/babel" data-type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'srs-pronunciation-app-react';
+        window.addEventListener('DOMContentLoaded', () => {
+            const { useState, useEffect, useRef } = React;
+            const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } = window.Recharts;
 
-// --- Helper Components ---
+            // --- Firebase Configuration ---
+            const firebaseConfig = {
+                apiKey: "AIzaSyDrsyLfZZ6EAmceJRAF1ZbvJlQgsiAJTmM",
+                authDomain: "srmm-fb551.firebaseapp.com",
+                projectId: "srmm-fb551",
+                storageBucket: "srmm-fb551.firebasestorage.app",
+                messagingSenderId: "726243713127",
+                appId: "1:726243713127:web:97af2dc2e117e1d9c074c2"
+            };
+            const appId = 'srs-pronunciation-app-react';
 
-const Card = ({ children, className = '' }) => (
-    <div className={`bg-white rounded-2xl shadow-lg p-6 md:p-8 ${className}`}>
-        {children}
-    </div>
-);
+            // --- Icon Components (using inline SVG to remove dependency) ---
+            const Icon = ({ className, children }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>;
+            const ArrowLeft = ({ size = 16 }) => <Icon className={`w-${size/4} h-${size/4}`}><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></Icon>;
+            const Loader2 = ({ className }) => <Icon className={className}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></Icon>;
+            const Sparkles = ({ className }) => <Icon className={className}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275z"/></Icon>;
+            const LogOut = ({ size = 20 }) => <Icon className={`w-${size/4} h-${size/4}`}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></Icon>;
+            const CheckCircle = ({ className }) => <Icon className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></Icon>;
+            const Volume2 = () => <Icon><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></Icon>;
+            const RotateCcw = ({ size = 16 }) => <Icon className={`w-${size/4} h-${size/4}`}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></Icon>;
 
-const Button = ({ children, onClick, className = '', variant = 'primary', ...props }) => {
-    const baseClasses = 'w-full font-bold py-3 px-4 rounded-lg transition duration-200 ease-in-out flex items-center justify-center disabled:opacity-50';
-    const variants = {
-        primary: 'bg-blue-500 hover:bg-blue-600 text-white',
-        secondary: 'bg-gray-200 hover:bg-gray-300 text-gray-800',
-        danger: 'bg-red-500 hover:bg-red-600 text-white',
-        success: 'bg-green-500 hover:bg-green-600 text-white',
-    };
-    return (
-        <button onClick={onClick} className={`${baseClasses} ${variants[variant]} ${className}`} {...props}>
-            {children}
-        </button>
-    );
-};
+            // --- Helper Components ---
+            const Card = ({ children, className = '' }) => <div className={`bg-white rounded-2xl shadow-lg p-6 md:p-8 ${className}`}>{children}</div>;
+            const Button = ({ children, onClick, className = '', variant = 'primary', ...props }) => {
+                const baseClasses = 'w-full font-bold py-3 px-4 rounded-lg transition duration-200 ease-in-out flex items-center justify-center disabled:opacity-50';
+                const variants = {
+                    primary: 'bg-blue-500 hover:bg-blue-600 text-white',
+                    secondary: 'bg-gray-200 hover:bg-gray-300 text-gray-800',
+                    danger: 'bg-red-500 hover:bg-red-600 text-white',
+                    success: 'bg-green-500 hover:bg-green-600 text-white',
+                };
+                return <button onClick={onClick} className={`${baseClasses} ${variants[variant]} ${className}`} {...props}>{children}</button>;
+            };
+            const Input = (props) => <input {...props} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />;
 
-const Input = (props) => (
-    <input {...props} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-);
-
-// --- Main App Components ---
-
-const LoginScreen = ({ auth }) => {
-    const [isSigningUp, setIsSigningUp] = useState(false);
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        setIsLoading(true);
-        try {
-            if (isSigningUp) {
-                await createUserWithEmailAndPassword(auth, email, password);
-            } else {
-                await signInWithEmailAndPassword(auth, email, password);
-            }
-        } catch (err) {
-            setError(err.message.replace('Firebase: ', ''));
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    return (
-        <div className="w-full max-w-sm mx-auto">
-            <Card>
-                <div className="text-center mb-6">
-                    <h1 className="text-3xl font-bold text-gray-900">Pronunciation Practice</h1>
-                    <p className="text-gray-500 mt-2">{isSigningUp ? 'Create a new account' : 'Sign in to your account'}</p>
-                </div>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required />
-                    <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required />
-                    {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-                    <Button type="submit" disabled={isLoading}>
-                        {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {isSigningUp ? 'Create Account' : 'Sign In'}
-                    </Button>
-                </form>
-                <div className="text-center text-sm text-gray-600 mt-6">
-                    <p>
-                        {isSigningUp ? 'Already have an account?' : "Don't have an account?"}
-                        <a href="#" onClick={(e) => { e.preventDefault(); setIsSigningUp(!isSigningUp); setError(''); }} className="font-medium text-blue-600 hover:underline ml-1">
-                            {isSigningUp ? 'Sign In' : 'Sign Up'}
-                        </a>
-                    </p>
-                </div>
-            </Card>
-        </div>
-    );
-};
-
-const Dashboard = ({ user, db, setScreen, setSelectedDeck, decks, stats }) => {
-    const [isLoading, setIsLoading] = useState(false);
-    
-    const handleSelectDeck = (deck) => {
-        setSelectedDeck(deck);
-        setScreen('practice');
-    };
-
-    const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD format
-    const reviewsToday = stats.find(s => s.date === today)?.reviews || 0;
-    const totalReviews = stats.reduce((acc, s) => acc + s.reviews, 0);
-
-    return (
-        <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                    <h3 className="text-sm font-medium text-blue-800">Reviews Today</h3>
-                    <p className="text-3xl font-bold text-blue-900">{reviewsToday}</p>
-                </div>
-                <div className="bg-green-50 p-4 rounded-lg">
-                    <h3 className="text-sm font-medium text-green-800">Total Reviews</h3>
-                    <p className="text-3xl font-bold text-green-900">{totalReviews}</p>
-                </div>
-            </div>
-            
-            <div>
-                <h3 className="text-lg font-semibold mb-2">Performance</h3>
-                <div className="w-full h-48 bg-gray-50 p-2 rounded-lg">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={stats} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="date" fontSize={12} tickFormatter={(tick) => new Date(tick).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />
-                            <YAxis />
-                            <Tooltip />
-                            <Bar dataKey="reviews" fill="#3b82f6" />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-            </div>
-
-            <div>
-                <h2 className="text-xl font-semibold mb-2">My Decks</h2>
-                <div className="space-y-3">
-                    {decks.map(deck => (
-                        <div key={deck.id} onClick={() => handleSelectDeck(deck)} className="bg-gray-100 hover:bg-blue-100 p-4 rounded-lg cursor-pointer transition">
-                            <h3 className="font-semibold">{deck.name}</h3>
-                            <p className="text-sm text-gray-600">{deck.description}</p>
-                        </div>
-                    ))}
-                </div>
-            </div>
-             <Button onClick={() => setScreen('ai-generator')} variant="secondary">
-                <Sparkles className="mr-2 h-4 w-4" /> Create Deck with AI
-            </Button>
-        </div>
-    );
-};
-
-const AiDeckGenerator = ({ user, db, setScreen, refreshDecks }) => {
-    const [topic, setTopic] = useState('');
-    const [numCards, setNumCards] = useState(5);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState('');
-    const [progressMessage, setProgressMessage] = useState('');
-
-    const generateDeck = async () => {
-        if (!topic.trim()) {
-            setError('Please enter a topic.');
-            return;
-        }
-        setIsLoading(true);
-        setError('');
-        setProgressMessage('Generating vocabulary...');
-
-        try {
-            // 1. Generate vocabulary and image prompts
-            const textPrompt = `Generate a JSON array of ${numCards} flashcards for an English pronunciation course. The topic is "${topic}". Each object in the array should have "word" (a word or short phrase), "explanation" (a brief pronunciation tip), "ipa" (the International Phonetic Alphabet transcription), and "imagePrompt" (a simple, clear description for an AI image generator to create an illustration for the word).`;
-            
-            let chatHistory = [{ role: "user", parts: [{ text: textPrompt }] }];
-            const payload = {
-                contents: chatHistory,
-                generationConfig: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: "ARRAY",
-                        items: {
-                            type: "OBJECT",
-                            properties: {
-                                "word": { "type": "STRING" },
-                                "explanation": { "type": "STRING" },
-                                "ipa": { "type": "STRING" },
-                                "imagePrompt": { "type": "STRING" }
-                            },
-                            required: ["word", "explanation", "ipa", "imagePrompt"]
-                        }
+            // --- Main App Components ---
+            const LoginScreen = ({ auth }) => {
+                const [isSigningUp, setIsSigningUp] = useState(false);
+                const [email, setEmail] = useState('');
+                const [password, setPassword] = useState('');
+                const [error, setError] = useState('');
+                const [isLoading, setIsLoading] = useState(false);
+                const handleSubmit = async (e) => {
+                    e.preventDefault();
+                    setError('');
+                    setIsLoading(true);
+                    try {
+                        if (isSigningUp) await createUserWithEmailAndPassword(auth, email, password);
+                        else await signInWithEmailAndPassword(auth, email, password);
+                    } catch (err) {
+                        setError(err.message.replace('Firebase: ', ''));
+                    } finally {
+                        setIsLoading(false);
                     }
-                }
+                };
+                return (
+                    <div className="w-full max-w-sm mx-auto min-h-screen flex items-center">
+                        <Card className="w-full">
+                            <div className="text-center mb-6">
+                                <h1 className="text-3xl font-bold text-gray-900">Pronunciation Practice</h1>
+                                <p className="text-gray-500 mt-2">{isSigningUp ? 'Create a new account' : 'Sign in to your account'}</p>
+                            </div>
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required />
+                                <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required />
+                                {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+                                <Button type="submit" disabled={isLoading}>{isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{isSigningUp ? 'Create Account' : 'Sign In'}</Button>
+                            </form>
+                            <div className="text-center text-sm text-gray-600 mt-6">
+                                <p>{isSigningUp ? 'Already have an account?' : "Don't have an account?"}<a href="#" onClick={(e) => { e.preventDefault(); setIsSigningUp(!isSigningUp); setError(''); }} className="font-medium text-blue-600 hover:underline ml-1">{isSigningUp ? 'Sign In' : 'Sign Up'}</a></p>
+                            </div>
+                        </Card>
+                    </div>
+                );
             };
-            
-            const apiKey = ""; // Provided by the environment
-            const textApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
-            
-            const textResponse = await fetch(textApiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
 
-            if (!textResponse.ok) throw new Error(`Text generation failed: ${textResponse.statusText}`);
-            
-            const textResult = await textResponse.json();
-            const generatedCards = JSON.parse(textResult.candidates[0].content.parts[0].text);
+            const Dashboard = ({ user, db, setScreen, setSelectedDeck, decks, stats, refreshDecks }) => {
+                const [confirmingReset, setConfirmingReset] = useState(null);
 
-            // 2. Generate images for each card
-            const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
-            const finalCards = [];
+                const handleSelectDeck = (deck) => {
+                    setSelectedDeck(deck);
+                    setScreen('practice');
+                };
 
-            for (let i = 0; i < generatedCards.length; i++) {
-                const card = generatedCards[i];
-                setProgressMessage(`Generating image ${i + 1}/${generatedCards.length}: ${card.word}`);
-                
-                const imagePayload = { instances: [{ prompt: card.imagePrompt }], parameters: { "sampleCount": 1 } };
-                const imageResponse = await fetch(imageApiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(imagePayload)
-                });
-                
-                if (!imageResponse.ok) {
-                    console.warn(`Image generation failed for "${card.word}". Skipping image.`);
-                    finalCards.push({ front: card.word, back: { explanation: card.explanation, ipa: card.ipa }, imageUrl: null });
-                    continue;
-                }
+                const handleResetClick = (e, deckId) => {
+                    e.stopPropagation();
+                    setConfirmingReset(deckId);
+                };
 
-                const imageResult = await imageResponse.json();
-                const base64ImageData = imageResult.predictions[0].bytesBase64Encoded;
-                const imageUrl = `data:image/png;base64,${base64ImageData}`;
-                
-                finalCards.push({ front: card.word, back: { explanation: card.explanation, ipa: card.ipa }, imageUrl });
-            }
+                const handleConfirmReset = async (e, deckId) => {
+                    e.stopPropagation();
+                    if (deckId === "common-business-words") {
+                         console.log("Resetting local deck progress is not implemented in this version.");
+                         setConfirmingReset(null);
+                         return;
+                    }
+                    const progressRef = doc(db, `artifacts/${appId}/users/${user.uid}/progress`, deckId);
+                    try {
+                        await deleteDoc(progressRef);
+                        console.log(`Progress for deck ${deckId} has been reset.`);
+                    } catch (error) {
+                        console.error("Error resetting progress:", error);
+                    } finally {
+                        setConfirmingReset(null);
+                    }
+                };
 
-            // 3. Save the new deck to Firestore
-            setProgressMessage('Saving your new deck...');
-            const newDeckId = `ai_${Date.now()}`;
-            const newDeck = {
-                id: newDeckId,
-                name: `AI: ${topic}`,
-                description: `An AI-generated deck with ${finalCards.length} cards.`,
-                cards: finalCards,
-                isAiGenerated: true,
-            };
-            
-            const deckRef = doc(db, `artifacts/${appId}/users/${user.uid}/decks`, newDeckId);
-            await setDoc(deckRef, newDeck);
+                const today = new Date().toLocaleDateString('en-CA');
+                const reviewsToday = stats.find(s => s.date === today)?.reviews || 0;
+                const totalReviews = stats.reduce((acc, s) => acc + s.reviews, 0);
 
-            await refreshDecks();
-            setScreen('dashboard');
-
-        } catch (err) {
-            console.error("AI Deck Generation Error:", err);
-            setError(`An error occurred: ${err.message}`);
-        } finally {
-            setIsLoading(false);
-            setProgressMessage('');
-        }
-    };
-
-    return (
-        <div className="space-y-6">
-            <button onClick={() => setScreen('dashboard')} className="flex items-center text-sm text-gray-600 hover:text-gray-900">
-                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
-            </button>
-            <div className="text-center">
-                <h2 className="text-2xl font-bold">Create a Deck with AI</h2>
-                <p className="text-gray-500 mt-1">Describe a topic and let AI build a practice deck for you.</p>
-            </div>
-            <div className="space-y-4">
-                <Input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="e.g., Job Interview Vocabulary" />
-                <div>
-                    <label htmlFor="numCards" className="block text-sm font-medium text-gray-700">Number of cards: {numCards}</label>
-                    <input id="numCards" type="range" min="3" max="10" value={numCards} onChange={(e) => setNumCards(e.target.value)} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
-                </div>
-            </div>
-            {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-            {isLoading && (
-                <div className="text-center space-y-2">
-                    <div className="flex justify-center">
-                        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                    </div>
-                    <p className="text-sm text-gray-600">{progressMessage}</p>
-                </div>
-            )}
-            <Button onClick={generateDeck} disabled={isLoading}>
-                <Sparkles className="mr-2 h-4 w-4" /> Generate Deck
-            </Button>
-        </div>
-    );
-};
-
-const PracticeScreen = ({ user, db, deck, setScreen, updateStats }) => {
-    const [queue, setQueue] = useState([]);
-    const [currentCardIndex, setCurrentCardIndex] = useState(0);
-    const [isFlipped, setIsFlipped] = useState(false);
-    const [userProgress, setUserProgress] = useState([]);
-    const [stats, setStats] = useState({ new: 0, review: 0, done: 0 });
-    const isMounted = useRef(true);
-
-    useEffect(() => {
-        isMounted.current = true;
-        const loadProgressAndBuildQueue = async () => {
-            const progressRef = doc(db, `artifacts/${appId}/users/${user.uid}/progress`, deck.id);
-            const progressSnap = await getDoc(progressRef);
-            const loadedProgress = progressSnap.exists() ? progressSnap.data().progress || [] : [];
-            if (isMounted.current) {
-                setUserProgress(loadedProgress);
-                buildQueue(loadedProgress);
-            }
-        };
-
-        const buildQueue = (progress) => {
-            const now = new Date().toISOString();
-            const newCards = [];
-            const reviewCards = [];
-
-            deck.cards.forEach((card, index) => {
-                const p = progress.find(item => item.cardIndex === index);
-                if (!p) {
-                    newCards.push({ cardIndex: index, type: 'new' });
-                } else if (p.nextReview <= now) {
-                    reviewCards.push({ cardIndex: index, type: 'review' });
-                }
-            });
-
-            const sessionQueue = [...reviewCards, ...newCards.slice(0, 10)];
-            if (isMounted.current) {
-                setQueue(sessionQueue);
-                setStats({ new: newCards.length, review: reviewCards.length, done: 0 });
-            }
-        };
-
-        loadProgressAndBuildQueue();
-        
-        return () => { isMounted.current = false; };
-    }, [deck, user.uid, db]);
-
-    const saveProgress = async (finalProgress) => {
-        const progressRef = doc(db, `artifacts/${appId}/users/${user.uid}/progress`, deck.id);
-        await setDoc(progressRef, { progress: finalProgress }, { merge: true });
-        
-        const today = new Date().toLocaleDateString('en-CA');
-        const statsRef = doc(db, `artifacts/${appId}/users/${user.uid}/stats`, today);
-        const statsSnap = await getDoc(statsRef);
-        const currentReviews = statsSnap.exists() ? statsSnap.data().reviews : 0;
-        await setDoc(statsRef, { date: today, reviews: currentReviews + stats.done }, { merge: true });
-        updateStats();
-    };
-
-    const handleAnswer = (quality) => { // 0=Hard, 1=Good, 2=Easy
-        const cardIndex = queue[currentCardIndex].cardIndex;
-        let progress = userProgress.find(p => p.cardIndex === cardIndex);
-        if (!progress) {
-            progress = { cardIndex, interval: 0, easeFactor: 2.5 };
-        }
-
-        if (quality < 1) { // Hard
-            progress.interval = 1;
-            progress.easeFactor = Math.max(1.3, progress.easeFactor - 0.2);
-        } else {
-            if (progress.interval === 0) progress.interval = 1;
-            else if (progress.interval === 1) progress.interval = 6;
-            else progress.interval = Math.round(progress.interval * progress.easeFactor);
-            if (quality === 2) {
-                progress.easeFactor += 0.15;
-                progress.interval = Math.round(progress.interval * 1.3);
-            }
-        }
-        
-        const nextReviewDate = new Date();
-        nextReviewDate.setDate(nextReviewDate.getDate() + progress.interval);
-        progress.nextReview = nextReviewDate.toISOString();
-
-        const updatedProgress = [...userProgress.filter(p => p.cardIndex !== cardIndex), progress];
-        setUserProgress(updatedProgress);
-
-        const currentCardType = queue[currentCardIndex].type;
-        setStats(prev => ({
-            new: currentCardType === 'new' ? prev.new - 1 : prev.new,
-            review: currentCardType === 'review' ? prev.review - 1 : prev.review,
-            done: prev.done + 1,
-        }));
-
-        if (currentCardIndex + 1 >= queue.length) {
-            saveProgress(updatedProgress);
-            setScreen('dashboard');
-        } else {
-            setIsFlipped(false);
-            setCurrentCardIndex(currentCardIndex + 1);
-        }
-    };
-    
-    const speakText = (text) => {
-        if ('speechSynthesis' in window && text) {
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'en-US';
-            window.speechSynthesis.speak(utterance);
-        }
-    };
-
-    if (queue.length === 0) {
-        return (
-            <div className="text-center py-16">
-                <CheckCircle className="mx-auto h-12 w-12 text-green-500" />
-                <h2 className="text-2xl font-bold text-green-600 mt-4">All Done!</h2>
-                <p className="mt-2 text-gray-600">You've finished all your reviews for this deck for now.</p>
-                <Button onClick={() => setScreen('dashboard')} className="mt-6">Back to Dashboard</Button>
-            </div>
-        );
-    }
-
-    const currentCardData = deck.cards[queue[currentCardIndex].cardIndex];
-
-    return (
-        <div className="space-y-4">
-            <button onClick={() => setScreen('dashboard')} className="flex items-center text-sm text-gray-600 hover:text-gray-900">
-                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Decks
-            </button>
-            <div className="flex justify-between text-sm text-gray-500">
-                <span>New: {stats.new}</span>
-                <span>To Review: {stats.review}</span>
-                <span>Done: {stats.done}</span>
-            </div>
-            <div className="relative h-64 w-full perspective-1000" onClick={() => !isFlipped && setIsFlipped(true)}>
-                <div className={`card w-full h-full ${isFlipped ? 'is-flipped' : ''}`}>
-                    {/* Front */}
-                    <div className="card-face flex flex-col items-center justify-center p-6 bg-blue-500 text-white rounded-xl shadow-md">
-                        {currentCardData.imageUrl && <img src={currentCardData.imageUrl} alt={currentCardData.front} className="w-24 h-24 object-cover rounded-lg mb-4" />}
-                        <p className="text-3xl font-semibold text-center">{currentCardData.front}</p>
-                        <button onClick={(e) => { e.stopPropagation(); speakText(currentCardData.front); }} className="mt-4 p-3 rounded-full bg-blue-600 hover:bg-blue-700 transition">
-                            <Volume2 />
-                        </button>
-                    </div>
-                    {/* Back */}
-                    <div className="card-face card-face-back flex flex-col items-center justify-center p-6 bg-blue-700 text-white rounded-xl shadow-md">
-                        <p className="text-2xl font-medium text-center">{currentCardData.back.explanation}</p>
-                        <p className="text-lg text-blue-200 mt-2">{currentCardData.back.ipa}</p>
-                        <button onClick={(e) => { e.stopPropagation(); speakText(currentCardData.back.explanation); }} className="mt-4 p-3 rounded-full bg-blue-800 hover:bg-blue-900 transition">
-                            <Volume2 />
-                        </button>
-                    </div>
-                </div>
-            </div>
-            {isFlipped ? (
-                <div className="mt-6 grid grid-cols-3 gap-3">
-                    <Button onClick={() => handleAnswer(0)} variant="danger">Hard</Button>
-                    <Button onClick={() => handleAnswer(1)} variant="primary">Good</Button>
-                    <Button onClick={() => handleAnswer(2)} variant="success">Easy</Button>
-                </div>
-            ) : (
-                <Button onClick={() => setIsFlipped(true)} className="mt-6">Show Answer</Button>
-            )}
-        </div>
-    );
-};
-
-
-// --- Main App Component ---
-export default function App() {
-    const [user, setUser] = useState(null);
-    const [authService, setAuthService] = useState(null);
-    const [dbService, setDbService] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [screen, setScreen] = useState('dashboard'); // dashboard, practice, ai-generator
-    const [selectedDeck, setSelectedDeck] = useState(null);
-    const [decks, setDecks] = useState([]);
-    const [stats, setStats] = useState([]);
-
-    const refreshDecks = async (currentUser, db) => {
-        if (!currentUser || !db) return;
-        
-        const sampleDeck = {
-            id: "common-business-words",
-            name: "Common Business Words",
-            description: "Essential vocabulary for meetings and presentations.",
-            cards: [
-                { front: "Schedule", back: { explanation: "Pronounced 'SKED-jool' in AmE, not 'SHED-yool'.", ipa: "/ˈskɛdʒ.uːl/" }},
-                { front: "Hierarchy", back: { explanation: "Focus on the 'HI-er-ar-ky' sound.", ipa: "/ˈhaɪ.ə.rɑːr.ki/" }},
-                { front: "Colleague", back: { explanation: "Stress is on the first syllable: 'KO-leeg'.", ipa: "/ˈkɒl.iːɡ/" }},
-                { front: "Entrepreneur", back: { explanation: "A tricky one! 'on-truh-pruh-NUR'.", ipa: "/ˌɒn.trə.prəˈnɜːr/" }},
-                { front: "Negotiate", back: { explanation: "Pronounced 'ne-GO-she-ate'.", ipa: "/nəˈɡoʊ.ʃi.eɪt/" }}
-            ]
-        };
-
-        const userDecksCollection = collection(db, `artifacts/${appId}/users/${currentUser.uid}/decks`);
-        const userDecksSnap = await getDocs(userDecksCollection);
-        const userDecks = userDecksSnap.docs.map(doc => doc.data());
-        
-        setDecks([sampleDeck, ...userDecks]);
-    };
-    
-    const refreshStats = async (currentUser, db) => {
-        if (!currentUser || !db) return;
-        const statsCollection = collection(db, `artifacts/${appId}/users/${currentUser.uid}/stats`);
-        const statsSnap = await getDocs(statsCollection);
-        const userStats = statsSnap.docs.map(doc => doc.data());
-        // Sort by date and take the last 30 days for the graph
-        userStats.sort((a, b) => new Date(a.date) - new Date(b.date));
-        setStats(userStats.slice(-30));
-    };
-
-    useEffect(() => {
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        setAuthService(auth);
-        setDbService(db);
-
-        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-            setUser(currentUser);
-            if (currentUser) {
-                await Promise.all([
-                    refreshDecks(currentUser, db),
-                    refreshStats(currentUser, db)
-                ]);
-            }
-            setIsLoading(false);
-        });
-
-        return () => unsubscribe();
-    }, []);
-
-    const handleLogout = async () => {
-        if (authService) {
-            await signOut(authService);
-            setDecks([]);
-            setStats([]);
-            setScreen('dashboard');
-        }
-    };
-
-    const renderScreen = () => {
-        switch (screen) {
-            case 'practice':
-                return <PracticeScreen user={user} db={dbService} deck={selectedDeck} setScreen={setScreen} updateStats={() => refreshStats(user, dbService)} />;
-            case 'ai-generator':
-                return <AiDeckGenerator user={user} db={dbService} setScreen={setScreen} refreshDecks={() => refreshDecks(user, dbService)} />;
-            case 'dashboard':
-            default:
-                return <Dashboard user={user} db={dbService} setScreen={setScreen} setSelectedDeck={setSelectedDeck} decks={decks} stats={stats} />;
-        }
-    };
-
-    if (isLoading) {
-        return (
-            <div className="flex items-center justify-center min-h-screen">
-                <Loader2 className="h-12 w-12 animate-spin text-blue-500" />
-            </div>
-        );
-    }
-
-    return (
-        <div className="w-full max-w-md mx-auto">
-            {!user ? (
-                <LoginScreen auth={authService} />
-            ) : (
-                <Card>
-                    <div className="flex justify-between items-center mb-6">
-                        <div className="text-left">
-                            <h1 className="text-2xl font-bold text-gray-900">Pronunciation Pro</h1>
-                            <p className="text-xs text-gray-500 mt-1">{user.email}</p>
+                return (
+                    <div className="space-y-6">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-blue-50 p-4 rounded-lg"><h3 className="text-sm font-medium text-blue-800">Reviews Today</h3><p className="text-3xl font-bold text-blue-900">{reviewsToday}</p></div>
+                            <div className="bg-green-50 p-4 rounded-lg"><h3 className="text-sm font-medium text-green-800">Total Reviews</h3><p className="text-3xl font-bold text-green-900">{totalReviews}</p></div>
                         </div>
-                        <button onClick={handleLogout} className="p-2 rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition">
-                            <LogOut size={20} />
-                        </button>
+                        <div>
+                            <h3 className="text-lg font-semibold mb-2">Performance</h3>
+                            <div className="w-full h-48 bg-gray-50 p-2 rounded-lg">
+                                <ResponsiveContainer width="100%" height="100%"><BarChart data={stats} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" fontSize={12} tickFormatter={(tick) => new Date(tick).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} /><YAxis /><Tooltip /><Bar dataKey="reviews" fill="#3b82f6" /></BarChart></ResponsiveContainer>
+                            </div>
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-semibold mb-2">My Decks</h2>
+                            <div className="space-y-3">
+                                {decks.map(deck => (
+                                    <div key={deck.id} onClick={() => handleSelectDeck(deck)} className="bg-gray-100 hover:bg-blue-100 p-4 rounded-lg cursor-pointer transition flex justify-between items-center">
+                                        <div>
+                                            <h3 className="font-semibold">{deck.name}</h3>
+                                            <p className="text-sm text-gray-600">{deck.description}</p>
+                                        </div>
+                                        {confirmingReset === deck.id ? (
+                                            <div className="flex items-center space-x-2">
+                                                <button onClick={(e) => handleConfirmReset(e, deck.id)} className="text-xs bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600">Confirm?</button>
+                                                <button onClick={(e) => {e.stopPropagation(); setConfirmingReset(null)}} className="text-xs bg-gray-300 px-2 py-1 rounded hover:bg-gray-400">Cancel</button>
+                                            </div>
+                                        ) : (
+                                            <button onClick={(e) => handleResetClick(e, deck.id)} className="p-2 rounded-full hover:bg-gray-200 text-gray-500"><RotateCcw size={16} /></button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <Button onClick={() => setScreen('ai-generator')} variant="secondary"><Sparkles className="mr-2 h-4 w-4" /> Create Deck with AI</Button>
                     </div>
-                    {renderScreen()}
-                </Card>
-            )}
-        </div>
-    );
-}
+                );
+            };
+
+            const AiDeckGenerator = ({ user, db, setScreen, refreshDecks }) => {
+                const [topic, setTopic] = useState('');
+                const [numCards, setNumCards] = useState(5);
+                const [isLoading, setIsLoading] = useState(false);
+                const [error, setError] = useState('');
+                const [progressMessage, setProgressMessage] = useState('');
+
+                const generateDeck = async () => {
+                    if (!topic.trim()) { setError('Please enter a topic.'); return; }
+                    setIsLoading(true); setError(''); setProgressMessage('Generating vocabulary...');
+                    try {
+                        const textPrompt = `Generate a JSON array of ${numCards} flashcards for an English pronunciation course. The topic is "${topic}". Each object in the array should have "word" (a word or short phrase), "explanation" (a brief pronunciation tip), "ipa" (the International Phonetic Alphabet transcription), and "imagePrompt" (a simple, clear description for an AI image generator to create an illustration for the word).`;
+                        const payload = { contents: [{ role: "user", parts: [{ text: textPrompt }] }], generationConfig: { responseMimeType: "application/json", responseSchema: { type: "ARRAY", items: { type: "OBJECT", properties: { "word": { "type": "STRING" }, "explanation": { "type": "STRING" }, "ipa": { "type": "STRING" }, "imagePrompt": { "type": "STRING" } }, required: ["word", "explanation", "ipa", "imagePrompt"] } } } };
+                        const apiKey = "";
+                        const textApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                        const textResponse = await fetch(textApiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                        if (!textResponse.ok) throw new Error(`Text generation failed: ${textResponse.statusText}`);
+                        const textResult = await textResponse.json();
+                        const generatedCards = JSON.parse(textResult.candidates[0].content.parts[0].text);
+                        const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+                        const finalCards = [];
+                        for (let i = 0; i < generatedCards.length; i++) {
+                            const card = generatedCards[i];
+                            setProgressMessage(`Generating image ${i + 1}/${generatedCards.length}: ${card.word}`);
+                            const imagePayload = { instances: [{ prompt: card.imagePrompt }], parameters: { "sampleCount": 1 } };
+                            const imageResponse = await fetch(imageApiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(imagePayload) });
+                            if (!imageResponse.ok) { console.warn(`Image generation failed for "${card.word}". Skipping image.`); finalCards.push({ front: card.word, back: { explanation: card.explanation, ipa: card.ipa }, imageUrl: null }); continue; }
+                            const imageResult = await imageResponse.json();
+                            const base64ImageData = imageResult.predictions[0].bytesBase64Encoded;
+                            const imageUrl = `data:image/png;base64,${base64ImageData}`;
+                            finalCards.push({ front: card.word, back: { explanation: card.explanation, ipa: card.ipa }, imageUrl });
+                        }
+                        setProgressMessage('Saving your new deck...');
+                        const newDeckId = `ai_${Date.now()}`;
+                        const newDeck = { id: newDeckId, name: `AI: ${topic}`, description: `An AI-generated deck with ${finalCards.length} cards.`, cards: finalCards, isAiGenerated: true, };
+                        const deckRef = doc(db, `artifacts/${appId}/users/${user.uid}/decks`, newDeckId);
+                        await setDoc(deckRef, newDeck);
+                        await refreshDecks();
+                        setScreen('dashboard');
+                    } catch (err) { console.error("AI Deck Generation Error:", err); setError(`An error occurred: ${err.message}`); } finally { setIsLoading(false); setProgressMessage(''); }
+                };
+                return <div className="space-y-6"><button onClick={() => setScreen('dashboard')} className="flex items-center text-sm text-gray-600 hover:text-gray-900"><ArrowLeft size={16} /> <span className="ml-2">Back to Dashboard</span></button><div className="text-center"><h2 className="text-2xl font-bold">Create a Deck with AI</h2><p className="text-gray-500 mt-1">Describe a topic and let AI build a practice deck for you.</p></div><div className="space-y-4"><Input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="e.g., Job Interview Vocabulary" /><div><label htmlFor="numCards" className="block text-sm font-medium text-gray-700">Number of cards: {numCards}</label><input id="numCards" type="range" min="3" max="10" value={numCards} onChange={(e) => setNumCards(e.target.value)} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" /></div></div>{error && <p className="text-red-500 text-sm text-center">{error}</p>}{isLoading && <div className="text-center space-y-2"><div className="flex justify-center"><Loader2 className="h-8 w-8 animate-spin text-blue-500" /></div><p className="text-sm text-gray-600">{progressMessage}</p></div>}<Button onClick={generateDeck} disabled={isLoading}><Sparkles className="mr-2 h-4 w-4" /> Generate Deck</Button></div>;
+            };
+            
+            const PracticeScreen = ({ user, db, deck, setScreen, updateStats }) => {
+                const [queue, setQueue] = useState([]); const [currentCardIndex, setCurrentCardIndex] = useState(0); const [isFlipped, setIsFlipped] = useState(false); const [userProgress, setUserProgress] = useState([]); const [stats, setStats] = useState({ new: 0, review: 0, done: 0 }); const isMounted = useRef(true);
+                useEffect(() => { isMounted.current = true; const loadProgressAndBuildQueue = async () => { const progressRef = doc(db, `artifacts/${appId}/users/${user.uid}/progress`, deck.id); const progressSnap = await getDoc(progressRef); const loadedProgress = progressSnap.exists() ? progressSnap.data().progress || [] : []; if (isMounted.current) { setUserProgress(loadedProgress); buildQueue(loadedProgress); } }; const buildQueue = (progress) => { const now = new Date().toISOString(); const newCards = []; const reviewCards = []; deck.cards.forEach((card, index) => { const p = progress.find(item => item.cardIndex === index); if (!p) newCards.push({ cardIndex: index, type: 'new' }); else if (p.nextReview <= now) reviewCards.push({ cardIndex: index, type: 'review' }); }); const sessionQueue = [...reviewCards, ...newCards.slice(0, 10)]; if (isMounted.current) { setQueue(sessionQueue); setStats({ new: newCards.length, review: reviewCards.length, done: 0 }); } }; loadProgressAndBuildQueue(); return () => { isMounted.current = false; }; }, [deck, user.uid, db]);
+                const saveProgress = async (finalProgress) => { const progressRef = doc(db, `artifacts/${appId}/users/${user.uid}/progress`, deck.id); await setDoc(progressRef, { progress: finalProgress }, { merge: true }); const today = new Date().toLocaleDateString('en-CA'); const statsRef = doc(db, `artifacts/${appId}/users/${user.uid}/stats`, today); const statsSnap = await getDoc(statsRef); const currentReviews = statsSnap.exists() ? statsSnap.data().reviews : 0; await setDoc(statsRef, { date: today, reviews: currentReviews + stats.done }, { merge: true }); updateStats(); };
+                const handleAnswer = (quality) => { const cardIndex = queue[currentCardIndex].cardIndex; let progress = userProgress.find(p => p.cardIndex === cardIndex); if (!progress) { progress = { cardIndex, interval: 0, easeFactor: 2.5 }; } if (quality < 1) { progress.interval = 1; progress.easeFactor = Math.max(1.3, progress.easeFactor - 0.2); } else { if (progress.interval === 0) progress.interval = 1; else if (progress.interval === 1) progress.interval = 6; else progress.interval = Math.round(progress.interval * progress.easeFactor); if (quality === 2) { progress.easeFactor += 0.15; progress.interval = Math.round(progress.interval * 1.3); } } const nextReviewDate = new Date(); nextReviewDate.setDate(nextReviewDate.getDate() + progress.interval); progress.nextReview = nextReviewDate.toISOString(); const updatedProgress = [...userProgress.filter(p => p.cardIndex !== cardIndex), progress]; setUserProgress(updatedProgress); const currentCardType = queue[currentCardIndex].type; setStats(prev => ({ new: currentCardType === 'new' ? prev.new - 1 : prev.new, review: currentCardType === 'review' ? prev.review - 1 : prev.review, done: prev.done + 1, })); if (currentCardIndex + 1 >= queue.length) { saveProgress(updatedProgress); setScreen('dashboard'); } else { setIsFlipped(false); setCurrentCardIndex(currentCardIndex + 1); } };
+                const speakText = (text) => { if ('speechSynthesis' in window && text) { const utterance = new SpeechSynthesisUtterance(text); utterance.lang = 'en-US'; window.speechSynthesis.speak(utterance); } };
+                if (queue.length === 0) return <div className="text-center py-16"><CheckCircle className="mx-auto h-12 w-12 text-green-500" /><h2 className="text-2xl font-bold text-green-600 mt-4">All Done!</h2><p className="mt-2 text-gray-600">You've finished all your reviews for this deck for now.</p><Button onClick={() => setScreen('dashboard')} className="mt-6">Back to Dashboard</Button></div>;
+                const currentCardData = deck.cards[queue[currentCardIndex].cardIndex];
+                return <div className="space-y-4"><button onClick={() => setScreen('dashboard')} className="flex items-center text-sm text-gray-600 hover:text-gray-900"><ArrowLeft size={16} /> <span className="ml-2">Back to Decks</span></button><div className="flex justify-between text-sm text-gray-500"><span>New: {stats.new}</span><span>To Review: {stats.review}</span><span>Done: {stats.done}</span></div><div className="relative h-64 w-full perspective-1000" onClick={() => !isFlipped && setIsFlipped(true)}><div className={`card w-full h-full ${isFlipped ? 'is-flipped' : ''}`}><div className="card-face flex flex-col items-center justify-center p-6 bg-blue-500 text-white rounded-xl shadow-md">{currentCardData.imageUrl && <img src={currentCardData.imageUrl} alt={currentCardData.front} className="w-24 h-24 object-cover rounded-lg mb-4" />}<p className="text-3xl font-semibold text-center">{currentCardData.front}</p><button onClick={(e) => { e.stopPropagation(); speakText(currentCardData.front); }} className="mt-4 p-3 rounded-full bg-blue-600 hover:bg-blue-700 transition"><Volume2 /></button></div><div className="card-face card-face-back flex flex-col items-center justify-center p-6 bg-blue-700 text-white rounded-xl shadow-md"><p className="text-2xl font-medium text-center">{currentCardData.back.explanation}</p><p className="text-lg text-blue-200 mt-2">{currentCardData.back.ipa}</p><button onClick={(e) => { e.stopPropagation(); speakText(currentCardData.back.explanation); }} className="mt-4 p-3 rounded-full bg-blue-800 hover:bg-blue-900 transition"><Volume2 /></button></div></div></div>{isFlipped ? <div className="mt-6 grid grid-cols-3 gap-3"><Button onClick={() => handleAnswer(0)} variant="danger">Hard</Button><Button onClick={() => handleAnswer(1)} variant="primary">Good</Button><Button onClick={() => handleAnswer(2)} variant="success">Easy</Button></div> : <Button onClick={() => setIsFlipped(true)} className="mt-6">Show Answer</Button>}</div>;
+            };
+
+            function App() {
+                const [user, setUser] = useState(null);
+                const [authService, setAuthService] = useState(null);
+                const [dbService, setDbService] = useState(null);
+                const [isLoading, setIsLoading] = useState(true);
+                const [screen, setScreen] = useState('dashboard');
+                const [selectedDeck, setSelectedDeck] = useState(null);
+                const [decks, setDecks] = useState([]);
+                const [stats, setStats] = useState([]);
+
+                const refreshDecks = async (currentUser, db) => {
+                    if (!currentUser || !db) return;
+                    const sampleDeck = { id: "common-business-words", name: "Common Business Words", description: "Essential vocabulary for meetings and presentations.", cards: [ { front: "Schedule", back: { explanation: "Pronounced 'SKED-jool' in AmE, not 'SHED-yool'.", ipa: "/ˈskɛdʒ.uːl/" } }, { front: "Hierarchy", back: { explanation: "Focus on the 'HI-er-ar-ky' sound.", ipa: "/ˈhaɪ.ə.rɑːr.ki/" } }, { front: "Colleague", back: { explanation: "Stress is on the first syllable: 'KO-leeg'.", ipa: "/ˈkɒl.iːɡ/" } }, { front: "Entrepreneur", back: { explanation: "A tricky one! 'on-truh-pruh-NUR'.", ipa: "/ˌɒn.trə.prəˈnɜːr/" } }, { front: "Negotiate", back: { explanation: "Pronounced 'ne-GO-she-ate'.", ipa: "/nəˈɡoʊ.ʃi.eɪt/" } } ] };
+                    const userDecksCollection = collection(db, `artifacts/${appId}/users/${currentUser.uid}/decks`);
+                    const userDecksSnap = await getDocs(userDecksCollection);
+                    const userDecks = userDecksSnap.docs.map(doc => doc.data());
+                    setDecks([sampleDeck, ...userDecks]);
+                };
+                
+                const refreshStats = async (currentUser, db) => {
+                    if (!currentUser || !db) return;
+                    const statsCollection = collection(db, `artifacts/${appId}/users/${currentUser.uid}/stats`);
+                    const statsSnap = await getDocs(statsCollection);
+                    const userStats = statsSnap.docs.map(doc => doc.data());
+                    userStats.sort((a, b) => new Date(a.date) - new Date(b.date));
+                    setStats(userStats.slice(-30));
+                };
+
+                useEffect(() => {
+                    const app = initializeApp(firebaseConfig);
+                    const auth = getAuth(app);
+                    const db = getFirestore(app);
+                    setAuthService(auth);
+                    setDbService(db);
+                    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+                        setUser(currentUser);
+                        if (currentUser) {
+                            await Promise.all([ refreshDecks(currentUser, db), refreshStats(currentUser, db) ]);
+                        }
+                        setIsLoading(false);
+                    });
+                    return () => unsubscribe();
+                }, []);
+
+                const handleLogout = async () => {
+                    if (authService) {
+                        await signOut(authService);
+                        setDecks([]); setStats([]); setScreen('dashboard');
+                    }
+                };
+
+                const renderScreen = () => {
+                    switch (screen) {
+                        case 'practice': return <PracticeScreen user={user} db={dbService} deck={selectedDeck} setScreen={setScreen} updateStats={() => refreshStats(user, dbService)} />;
+                        case 'ai-generator': return <AiDeckGenerator user={user} db={dbService} setScreen={setScreen} refreshDecks={() => refreshDecks(user, dbService)} />;
+                        default: return <Dashboard user={user} db={dbService} setScreen={setScreen} setSelectedDeck={setSelectedDeck} decks={decks} stats={stats} refreshDecks={() => refreshDecks(user, dbService)} />;
+                    }
+                };
+
+                if (isLoading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-12 w-12 animate-spin text-blue-500" /></div>;
+
+                return (
+                    <div className="w-full max-w-md mx-auto py-8">
+                        {!user ? <LoginScreen auth={authService} /> : (
+                            <Card>
+                                <div className="flex justify-between items-center mb-6">
+                                    <div className="text-left">
+                                        <h1 className="text-2xl font-bold text-gray-900">Pronunciation Pro</h1>
+                                        <p className="text-xs text-gray-500 mt-1">{user.email}</p>
+                                    </div>
+                                    <button onClick={handleLogout} className="p-2 rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition"><LogOut size={20} /></button>
+                                </div>
+                                {renderScreen()}
+                            </Card>
+                        )}
+                    </div>
+                );
+            }
+            
+            // --- Render the App ---
+            const container = document.getElementById('root');
+            const root = ReactDOM.createRoot(container);
+            root.render(<App />);
+        });
+    </script>
+</body>
+</html>
