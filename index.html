@@ -222,17 +222,28 @@
         function handleAnswer(quality) { SRS.updateCardProgress(currentCard.cardIndex, quality); if (currentCard.type === 'new') stats.new--; else stats.review--; stats.done++; updateStatsUI(); nextCard(); }
         
         // --- DATA HANDLING ---
-        async function loadDecks() { 
-            showScreen(loader); 
-            const deckList = document.getElementById('deck-list'); 
-            deckList.innerHTML = ''; 
-            const localDeck = LOCAL_SAMPLE_DECK; 
-            const localButton = document.createElement('button'); 
-            localButton.className = "w-full text-left p-4 bg-gray-100 hover:bg-blue-100 rounded-lg transition"; 
-            localButton.innerHTML = `<h3 class="font-semibold text-lg">${localDeck.name}</h3><p class="text-sm text-gray-600">${localDeck.description}</p>`; 
-            localButton.onclick = () => startPractice(localDeck.id, true); 
-            deckList.appendChild(localButton); 
-            showScreen(deckSelectionScreen); // This line was missing
+        async function loadDecks() {
+            console.log("Starting loadDecks...");
+            try {
+                showScreen(loader);
+                const deckList = document.getElementById('deck-list');
+                if (!deckList) {
+                    console.error("Deck list element not found!");
+                    return;
+                }
+                deckList.innerHTML = '';
+                const localDeck = LOCAL_SAMPLE_DECK;
+                const localButton = document.createElement('button');
+                localButton.className = "w-full text-left p-4 bg-gray-100 hover:bg-blue-100 rounded-lg transition";
+                localButton.innerHTML = `<h3 class="font-semibold text-lg">${localDeck.name}</h3><p class="text-sm text-gray-600">${localDeck.description}</p>`;
+                localButton.onclick = () => startPractice(localDeck.id, true);
+                deckList.appendChild(localButton);
+                
+                console.log("Local deck loaded. Showing screen.");
+                showScreen(deckSelectionScreen);
+            } catch (error) {
+                console.error("An error occurred in loadDecks:", error);
+            }
         }
         async function loadDeckAndProgress(deckId, isLocal = false) { if (isLocal) { masterDeck = LOCAL_SAMPLE_DECK.cards; } else { const deckRef = doc(db, `artifacts/${appId}/public/data/decks`, deckId); const deckSnap = await getDoc(deckRef); if (!deckSnap.exists()) { console.error("Deck not found!"); return; } masterDeck = deckSnap.data().cards; } const progressRef = doc(db, `artifacts/${appId}/users/${userId}/progress`, deckId); const progressSnap = await getDoc(progressRef); userProgress = progressSnap.exists() ? progressSnap.data().progress || [] : []; }
         async function saveProgress() { if (!userId || !currentCard) return; const deckId = practiceScreen.dataset.deckId; const progressRef = doc(db, `artifacts/${appId}/users/${userId}/progress`, deckId); try { await setDoc(progressRef, { progress: userProgress }, { merge: true }); } catch (error) { console.error("Error saving progress: ", error); } }
